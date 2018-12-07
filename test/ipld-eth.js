@@ -13,8 +13,7 @@ const loadFixture = require('aegir/fixtures')
 const async = require('async')
 const EthBlockHeader = require('ethereumjs-block/header')
 const EthTrieNode = require('merkle-patricia-tree/trieNode')
-const multihashes = require('multihashes')
-const CID = require('cids')
+const multicodec = require('multicodec')
 
 const IPLDResolver = require('../src')
 
@@ -34,8 +33,7 @@ module.exports = (repo) => {
 
       async.waterfall([
         readFilesFixture,
-        generateCids,
-        putInStore
+        generateCids
       ], done)
 
       function readFilesFixture (cb) {
@@ -68,7 +66,7 @@ module.exports = (repo) => {
         cb()
       }
 
-      function generateForType (label, type, rawData) {
+      async function generateForType (label, type, rawData) {
         let node
 
         switch (type) {
@@ -77,25 +75,23 @@ module.exports = (repo) => {
           default: throw new Error('Unknown type!')
         }
 
-        const multihash = multihashes.encode(node.hash(), 'keccak-256')
-        const cid = new CID(1, type, multihash)
+        // TODO vmx 2018-12-07: Make multicodec use constants
+        const format = multicodec.getCodeVarint(type).readUInt16BE(0)
+        const result = resolver.put([node], { format: format })
+        const cid = await result.first()
+
         return {
           raw: rawData,
           node: node,
           cid: cid
         }
       }
-
-      function putInStore (cb) {
-        async.each(ethObjs, (nodeData, next) => {
-          resolver.put(nodeData.node, { cid: nodeData.cid }, next)
-        }, cb)
-      }
     })
 
     describe('resolver.get', () => {
       it('block-to-block', async () => {
-        const result = resolver.resolve(ethObjs.child.cid, 'parent')
+        const child = await ethObjs.child
+        const result = resolver.resolve(child.cid, 'parent')
 
         const node1 = await result.first()
         expect(node1.remainderPath).to.eql('')
@@ -106,7 +102,8 @@ module.exports = (repo) => {
       })
 
       it('block-to-account resolve', async () => {
-        const result = resolver.resolve(ethObjs.child.cid,
+        const child = await ethObjs.child
+        const result = resolver.resolve(child.cid,
           'parent/state/0/0/0/0/1/7/2/7/8/a/1/e/6/e/9/6/3/5/e/1/a/3/f/1/1/e/b/0/2/2/d/a/1/f/5/7/e/a/0/0/4/d/8/5/2/d/9/d/1/9/4/2/d/4/3/6/0/8/5/4/0/4/7/1/nonce')
         const node = await result.last()
         expect(node.value.toString('hex'), '03')

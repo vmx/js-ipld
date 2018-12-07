@@ -57,25 +57,22 @@ module.exports = (repo) => {
     //   })
     // }
 
-    it('put - errors on unknown resolver', (done) => {
+    it('put - errors on unknown resolver', async () => {
       const bs = new BlockService(repo)
       const r = new IPLDResolver({ blockService: bs })
       // choosing a format that is not supported
-      r.put(null, { format: 'base1' }, (err, result) => {
-        expect(err).to.exist()
-        expect(err.message).to.eql('No resolver found for codec "base1"')
-        done()
-      })
+      // TODO vmx 2018-12-07: This shouldn't be a magic number but a constant
+      // from a multicodec module
+      const formatBase1 = 0x01
+      const result = r.put([null], { format: formatBase1 })
+      await expect(result.next()).to.be.rejectedWith(
+        'No resolver found for codec "base1"')
     })
 
-    it('put - errors if no options', (done) => {
+    it('put - errors if no options', () => {
       const bs = new BlockService(repo)
       const r = new IPLDResolver({ blockService: bs })
-      r.put(null, (err, result) => {
-        expect(err).to.exist()
-        expect(err.message).to.eql('IPLDResolver.put requires options')
-        done()
-      })
+      expect(() => r.put([null])).to.be.throw('`put` requires options')
     })
 
     it('_put - errors on unknown resolver', (done) => {
