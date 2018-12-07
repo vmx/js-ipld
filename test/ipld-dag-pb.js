@@ -9,8 +9,8 @@ const BlockService = require('ipfs-block-service')
 const dagPB = require('ipld-dag-pb')
 const series = require('async/series')
 const each = require('async/each')
-const pull = require('pull-stream')
 const multihash = require('multihashes')
+const multicodec = require('multicodec')
 const IPLDResolver = require('../src')
 
 module.exports = (repo) => {
@@ -22,6 +22,9 @@ module.exports = (repo) => {
     let cid1
     let cid2
     let cid3
+
+    // TODO vmx 2018-12-07: Make multicodec use constants
+    const formatDagPb = multicodec.getCodeVarint('dag-pb').readUInt8(0)
 
     before((done) => {
       const bs = new BlockService(repo)
@@ -95,44 +98,16 @@ module.exports = (repo) => {
             })
           })
         }
-      ], cids)
+      ], store)
 
-      function cids () {
-        series([
-          (cb) => {
-            dagPB.util.cid(node1, (err, cid) => {
-              expect(err).to.not.exist()
-              cid1 = cid
-              cb()
-            })
-          },
-          (cb) => {
-            dagPB.util.cid(node2, (err, cid) => {
-              expect(err).to.not.exist()
-              cid2 = cid
-              cb()
-            })
-          },
-          (cb) => {
-            dagPB.util.cid(node3, (err, cid) => {
-              expect(err).to.not.exist()
-              cid3 = cid
-              cb()
-            })
-          }
-        ], store)
-      }
+      async function store () {
+        const nodes = [node1, node2, node3]
+        const result = resolver.put(nodes, { format: formatDagPb })
+        cid1 = await result.first()
+        cid2 = await result.first()
+        cid3 = await result.first()
 
-      function store () {
-        pull(
-          pull.values([
-            { node: node1, cid: cid1 },
-            { node: node2, cid: cid2 },
-            { node: node3, cid: cid3 }
-          ]),
-          pull.asyncMap((nac, cb) => resolver.put(nac.node, { cid: nac.cid }, cb)),
-          pull.onEnd(done)
-        )
+        done()
       }
     })
 
@@ -160,34 +135,30 @@ module.exports = (repo) => {
     })
 
     describe('public api', () => {
-      it('resolver.put with CID', (done) => {
-        resolver.put(node1, { cid: cid1 }, done)
+      it('resolver.put with format', async () => {
+        const result = resolver.put([node1], { format: formatDagPb })
+        const cid = await result.first()
+        expect(cid.version).to.equal(1)
+        expect(cid.codec).to.equal('dag-pb')
+        expect(cid.multihash).to.exist()
+        const mh = multihash.decode(cid.multihash)
+        expect(mh.name).to.equal('sha2-256')
       })
 
-      it('resolver.put with format', (done) => {
-        resolver.put(node1, { format: 'dag-pb' }, (err, cid) => {
-          expect(err).to.not.exist()
-          expect(cid).to.exist()
-          expect(cid.version).to.equal(0)
-          expect(cid.codec).to.equal('dag-pb')
-          expect(cid.multihash).to.exist()
-          const mh = multihash.decode(cid.multihash)
-          expect(mh.name).to.equal('sha2-256')
-          done()
-        })
-      })
+      it('resolver.put with format + hashAlg', async () => {
+        // TODO vmx 2018-12-07: Make multicodec use constants
+        const hashAlgSha3512 = multicodec.getCodeVarint('sha3-512')
+          .readUInt8(0)
 
-      it('resolver.put with format + hashAlg', (done) => {
-        resolver.put(node1, { format: 'dag-pb', hashAlg: 'sha3-512' }, (err, cid) => {
-          expect(err).to.not.exist()
-          expect(cid).to.exist()
-          expect(cid.version).to.equal(1)
-          expect(cid.codec).to.equal('dag-pb')
-          expect(cid.multihash).to.exist()
-          const mh = multihash.decode(cid.multihash)
-          expect(mh.name).to.equal('sha3-512')
-          done()
+        const result = resolver.put([node1], {
+          format: formatDagPb, hashAlg: hashAlgSha3512
         })
+        const cid = await result.first()
+        expect(cid.version).to.equal(1)
+        expect(cid.codec).to.equal('dag-pb')
+        expect(cid.multihash).to.exist()
+        const mh = multihash.decode(cid.multihash)
+        expect(mh.name).to.equal('sha3-512')
       })
 
       // TODO vmx 2018-11-29: Change this test to use the new `get()`
@@ -215,7 +186,7 @@ module.exports = (repo) => {
 
         const node1 = await result.first()
         expect(node1.remainderPath).to.eql('Data')
-        expect(node1.value).to.eql(cid1)
+        expect(node1.value).to.eql(cid1.toV0())
 
         const node2 = await result.first()
         expect(node2.remainderPath).to.eql('')
@@ -227,11 +198,11 @@ module.exports = (repo) => {
 
         const node1 = await result.first()
         expect(node1.remainderPath).to.eql('Links/0/Hash/Data')
-        expect(node1.value).to.eql(cid2)
+        expect(node1.value).to.eql(cid2.toV0())
 
         const node2 = await result.first()
         expect(node2.remainderPath).to.eql('Data')
-        expect(node2.value).to.eql(cid1)
+        expect(node2.value).to.eql(cid1.toV0())
 
         const node3 = await result.first()
         expect(node3.remainderPath).to.eql('')

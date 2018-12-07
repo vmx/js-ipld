@@ -9,6 +9,7 @@ chai.use(dirtyChai)
 chai.use(chaiAsProised)
 const BlockService = require('ipfs-block-service')
 const dagCBOR = require('ipld-dag-cbor')
+const multicodec = require('multicodec')
 
 const IPLDResolver = require('../src')
 
@@ -16,17 +17,16 @@ module.exports = (repo) => {
   describe('IPLD format support', () => {
     let data, cid
 
-    before((done) => {
+    before(async () => {
       const bs = new BlockService(repo)
       const resolver = new IPLDResolver({ blockService: bs })
 
       data = { now: Date.now() }
 
-      dagCBOR.util.cid(data, (err, c) => {
-        expect(err).to.not.exist()
-        cid = c
-        resolver.put(data, { cid }, done)
-      })
+      // TODO vmx 2018-12-07: Make multicodec use constants
+      const formatDagCbor = multicodec.getCodeVarint('dag-cbor').readUInt8(0)
+      const result = resolver.put([data], { format: formatDagCbor })
+      cid = await result.last()
     })
 
     describe('Dynamic format loading', () => {
