@@ -11,7 +11,7 @@ const ZcashBlockHeader = require('zcash-bitcore-lib').BlockHeader
 const multihash = require('multihashes')
 const series = require('async/series')
 const each = require('async/each')
-const pull = require('pull-stream')
+const multicodec = require('multicodec')
 
 const IPLDResolver = require('../src')
 
@@ -41,6 +41,10 @@ module.exports = (repo) => {
     let cid1
     let cid2
     let cid3
+
+    // TODO vmx 2018-12-07: Make multicodec use constants
+    const formatZcashBlock = multicodec.getCodeVarint('zcash-block')
+      .readUInt16BE(0)
 
     before((done) => {
       const bs = new BlockService(repo)
@@ -88,16 +92,14 @@ module.exports = (repo) => {
         }
       ], store)
 
-      function store () {
-        pull(
-          pull.values([
-            { node: node1, cid: cid1 },
-            { node: node2, cid: cid2 },
-            { node: node3, cid: cid3 }
-          ]),
-          pull.asyncMap((nac, cb) => resolver.put(nac.node, { cid: nac.cid }, cb)),
-          pull.onEnd(done)
-        )
+      async function store () {
+        const nodes = [node1, node2, node3]
+        const result = resolver.put(nodes, { format: formatZcashBlock })
+        cid1 = await result.next().value
+        cid2 = await result.next().value
+        cid3 = await result.next().value
+
+        done()
       }
     })
 
@@ -126,34 +128,30 @@ module.exports = (repo) => {
     })
 
     describe('public api', () => {
-      it('resolver.put', (done) => {
-        resolver.put(node1, { cid: cid1 }, done)
+      it('resolver.put with format', async () => {
+        const result = resolver.put([node1], { format: formatZcashBlock })
+        const cid = await result.first()
+        expect(cid.version).to.equal(1)
+        expect(cid.codec).to.equal('zcash-block')
+        expect(cid.multihash).to.exist()
+        const mh = multihash.decode(cid.multihash)
+        expect(mh.name).to.equal('dbl-sha2-256')
       })
 
-      it('resolver.put with format', (done) => {
-        resolver.put(node1, { format: 'zcash-block' }, (err, cid) => {
-          expect(err).to.not.exist()
-          expect(cid).to.exist()
-          expect(cid.version).to.equal(1)
-          expect(cid.codec).to.equal('zcash-block')
-          expect(cid.multihash).to.exist()
-          const mh = multihash.decode(cid.multihash)
-          expect(mh.name).to.equal('dbl-sha2-256')
-          done()
-        })
-      })
+      it('resolver.put with format + hashAlg', async () => {
+        // TODO vmx 2018-12-07: Make multicodec use constants
+        const hashAlgSha3512 = multicodec.getCodeVarint('sha3-512')
+          .readUInt8(0)
 
-      it('resolver.put with format + hashAlg', (done) => {
-        resolver.put(node1, { format: 'zcash-block', hashAlg: 'sha3-512' }, (err, cid) => {
-          expect(err).to.not.exist()
-          expect(cid).to.exist()
-          expect(cid.version).to.equal(1)
-          expect(cid.codec).to.equal('zcash-block')
-          expect(cid.multihash).to.exist()
-          const mh = multihash.decode(cid.multihash)
-          expect(mh.name).to.equal('sha3-512')
-          done()
+        const result = resolver.put([node1], {
+          format: formatZcashBlock, hashAlg: hashAlgSha3512
         })
+        const cid = await result.first()
+        expect(cid.version).to.equal(1)
+        expect(cid.codec).to.equal('zcash-block')
+        expect(cid.multihash).to.exist()
+        const mh = multihash.decode(cid.multihash)
+        expect(mh.name).to.equal('sha3-512')
       })
 
       // // TODO vmx 2018-11-30: Implement getting the whole object properly

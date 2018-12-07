@@ -15,6 +15,8 @@ const mergeOptions = require('merge-options')
 const ipldDagCbor = require('ipld-dag-cbor')
 const ipldDagPb = require('ipld-dag-pb')
 const ipldRaw = require('ipld-raw')
+const multicodec = require('multicodec')
+const typical = require('typical')
 const { fancyIterator } = require('./util')
 
 function noop () {}
@@ -175,40 +177,96 @@ class IPLDResolver {
     })
   }
 
-  put (node, options, callback) {
-    if (typeof options === 'function') {
-      callback = options
-      return setImmediate(() => callback(
-        new Error('IPLDResolver.put requires options')
-      ))
+  /**
+   * Stores the given IPLD Nodes of a recognized IPLD Format.
+   *
+   * @param {Iterable.<Object>} nodes - Deserialized IPLD nodes that should be inserted.
+   * @param {Object} userOptions -  Options are applied to any of the `nodes` and is an object with the following properties.
+   * @param {number} userOptions.format - the multicodec of the format that IPLD Node should be encoded in.
+   * @param {number} [userOtions.hashAlg=hash algorithm of the given multicodec] - The hashing algorithm that is used to calculate the CID.
+   * @param {number} [userOptions.version=1]`- The CID version to use.
+   * @param {boolean} [userOptions.onlyHash=false] - If true the serialized form of the IPLD Node will not be passed to the underlying block store.
+   * @returns {Iterable.<Promise.<CID>>} - Returns an async iterator with the CIDs of the serialized IPLD Nodes.
+   */
+  put (nodes, userOptions) {
+    if (!typical.isIterable(nodes) || typical.isString(nodes) ||
+        Buffer.isBuffer(nodes)) {
+      throw new Error('`nodes` must be an iterable')
     }
-    callback = callback || noop
+    if (userOptions === undefined) {
+      throw new Error('`put` requires options')
+    }
+    if (userOptions.format === undefined) {
+      throw new Error('`format` option must be set')
+    }
+    if (typeof userOptions.format !== 'number') {
+      throw new Error('`format` option must be number (multicodec)')
+    }
 
-    if (options.cid && CID.isCID(options.cid)) {
-      if (options.onlyHash) {
-        return setImmediate(() => callback(null, options.cid))
+    let options
+    let format
+
+    const putIterator = {
+      next: () => {
+        // End iteration if there are no more nodes to put
+        if (nodes.length === 0) {
+          return {
+            done: true
+          }
+        }
+
+        const iterValue = new Promise(async (resolve, reject) => {
+          // Lazy load the options not when the iterator is initialized, but
+          // when we hit the first iteration. This way the constructor can be
+          // a synchronous function.
+          if (options === undefined) {
+            // NOTE vmx 2018-12-07: This is a dirty hack to make things work with the
+            // current multicodec implementations. Everything should be based on
+            // constants and numbers and not on strings.
+            let hexString = userOptions.format.toString(16)
+            if (hexString.length % 2 === 1) {
+              hexString = '0' + hexString
+            }
+            const formatCode = multicodec.getCodec(Buffer.from(hexString, 'hex'))
+            try {
+              format = await this._getFormat(formatCode)
+            } catch (err) {
+              return reject(err)
+            }
+            const defaultOptions = {
+              hashAlg: format.defaultHashAlg,
+              version: 1,
+              onlyHash: false
+            }
+            options = mergeOptions(defaultOptions, userOptions)
+          }
+
+          const node = nodes.shift()
+          format.util.cid(node, options, (err, cid) => {
+            if (err) {
+              return reject(err)
+            }
+
+            if (options.onlyHash) {
+              return resolve(cid)
+            }
+
+            this._put(cid, node, (err, cid) => {
+              if (err) {
+                return reject(err)
+              }
+              return resolve(cid)
+            })
+          })
+        })
+
+        return {
+          value: iterValue,
+          done: false
+        }
       }
-
-      return this._put(options.cid, node, callback)
     }
-
-    // TODO vmx 2018-12-07: Make this async/await once `put()` returns a
-    // Promise
-    this._getFormat(options.format).then((format) => {
-      format.util.cid(node, options, (err, cid) => {
-        if (err) {
-          return callback(err)
-        }
-
-        if (options.onlyHash) {
-          return callback(null, cid)
-        }
-
-        this._put(cid, node, callback)
-      })
-    }).catch((err) => {
-      callback(err)
-    })
+    return fancyIterator(putIterator)
   }
 
   treeStream (cid, path, options) {

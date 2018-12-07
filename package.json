@@ -56,14 +56,16 @@
     "interface-datastore": "~0.6.0",
     "ipfs-block": "~0.8.0",
     "ipfs-block-service": "~0.15.0",
-    "ipfs-repo": "~0.25.0",
+    "ipfs-repo": "~0.26.0",
     "ipld-dag-cbor": "~0.13.0",
     "ipld-dag-pb": "~0.15.0",
     "ipld-raw": "^2.0.1",
     "merge-options": "^1.0.1",
+    "multicodec": "~0.2.7",
     "pull-defer": "~0.2.3",
     "pull-stream": "^3.6.9",
-    "pull-traverse": "^1.0.3"
+    "pull-traverse": "^1.0.3",
+    "typical": "^3.0.0"
   },
   "contributors": [
     "Alan Shaw <alan.shaw@protocol.ai>",

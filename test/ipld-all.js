@@ -13,9 +13,9 @@ const expect = chai.expect
 chai.use(dirtyChai)
 const dagPB = require('ipld-dag-pb')
 const dagCBOR = require('ipld-dag-cbor')
-const each = require('async/each')
 const waterfall = require('async/waterfall')
 const CID = require('cids')
+const multicodec = require('multicodec')
 
 const IPLDResolver = require('../src')
 
@@ -26,6 +26,11 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
   let nodePb
   let cidCbor
   let cidPb
+
+  // TODO vmx 2018-12-07: Make multicodec use constants
+  const formatDagPb = multicodec.getCodeVarint('dag-pb').readUInt8(0)
+  const formatDagCbor = multicodec.getCodeVarint('dag-cbor').readUInt8(0)
+  const hashAlgSha2 = multicodec.getCodeVarint('sha2-256').readUInt8(0)
 
   before((done) => {
     waterfall([
@@ -47,15 +52,13 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
 
         dagCBOR.util.cid(nodeCbor, cb)
       },
-      (cid, cb) => {
-        cidCbor = cid
-
-        each([
-          { node: nodePb, cid: cidPb },
-          { node: nodeCbor, cid: cidCbor }
-        ], (nac, cb) => {
-          resolver.put(nac.node, { cid: nac.cid }, cb)
-        }, cb)
+      async (cid, cb) => {
+        const resultPb = resolver.put([nodePb], {
+          format: formatDagPb, version: 0
+        })
+        cidPb = await resultPb.next().value
+        const resultCbor = resolver.put([nodeCbor], { format: formatDagCbor })
+        cidCbor = await resultCbor.next().value
       }
     ], done)
   })
@@ -75,37 +78,16 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
   it('does not store nodes when onlyHash is passed', (done) => {
     waterfall([
       (cb) => dagPB.DAGNode.create(Buffer.from('Some data here'), cb),
-      (node, cb) => resolver.put(nodePb, {
-        onlyHash: true,
-        version: 1,
-        hashAlg: 'sha2-256',
-        format: 'dag-pb'
-      }, cb),
+      async (node) => {
+        const result = resolver.put([node], {
+          onlyHash: true,
+          version: 1,
+          hashAlg: hashAlgSha2,
+          format: formatDagPb
+        })
+        return result.first()
+      },
       (cid, cb) => resolver.bs._repo.blocks.has(cid, cb)
-    ], (error, result) => {
-      if (error) {
-        return done(error)
-      }
-
-      expect(result).to.be.false()
-      done()
-    })
-  })
-
-  it('does not store nodes when onlyHash is passed and a CID is passed', (done) => {
-    const cid = new CID('QmTmxQfEHbQzntsXPTU4ae2ZgBGwseBmS12AkZnKCkuf2G')
-
-    waterfall([
-      (cb) => dagPB.DAGNode.create(Buffer.from('Some data here'), cb),
-      (node, cb) => resolver.put(nodePb, {
-        onlyHash: true,
-        cid
-      }, cb),
-      (cid2, cb) => {
-        expect(cid2).to.equal(cid)
-
-        resolver.bs._repo.blocks.has(cid2, cb)
-      }
     ], (error, result) => {
       if (error) {
         return done(error)
