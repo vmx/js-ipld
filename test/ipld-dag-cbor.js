@@ -94,18 +94,6 @@ module.exports = (repo) => {
           resolver._put(nc.cid, nc.node, cb)
         }, done)
       })
-
-      // TODO vmx 2018-11-30 Change this test to use `get()`.
-      // it('resolver._get', (done) => {
-      //   resolver.put(node1, { cid: cid1 }, (err) => {
-      //     expect(err).to.not.exist()
-      //     resolver._get(cid1, (err, node) => {
-      //       expect(err).to.not.exist()
-      //       expect(node1).to.eql(node)
-      //       done()
-      //     })
-      //   })
-      // })
     })
 
     describe('public api', () => {
@@ -202,6 +190,14 @@ module.exports = (repo) => {
           'path not available at root')
       })
 
+      it('resolver.get round-trip', async () => {
+        const resultPut = resolver.put([node1], { format: formatDagCbor })
+        const cid = await resultPut.first()
+        const resultGet = resolver.get([cid])
+        const node = await resultGet.first()
+        expect(node).to.deep.equal(node1)
+      })
+
       it('resolver.tree', (done) => {
         pull(
           resolver.treeStream(cid3),
@@ -273,27 +269,26 @@ module.exports = (repo) => {
         )
       })
 
-      // // TODO vmx 2018-11-30: remove this `get()` call with the new `get()`
-      // it('resolver.remove', (done) => {
-      //   resolver.put(node1, { cid: cid1 }, (err) => {
-      //     expect(err).to.not.exist()
-      //     resolver.get(cid1, (err, result) => {
-      //       expect(err).to.not.exist()
-      //       expect(node1).to.eql(result.value)
-      //       remove()
-      //     })
-      //   })
-      //
-      //   function remove () {
-      //     resolver.remove(cid1, (err) => {
-      //       expect(err).to.not.exist()
-      //       resolver.get(cid1, (err) => {
-      //         expect(err).to.exist()
-      //         done()
-      //       })
-      //     })
-      //   }
-      // })
+      it('resolver.remove', async () => {
+        const resultPut = resolver.put([node1], { format: formatDagCbor })
+        const cid = await resultPut.next().value
+        const resultGet = resolver.get([cid])
+        const sameAsNode1 = await resultGet.first()
+        expect(sameAsNode1).to.deep.equal(node1)
+        return remove()
+
+        function remove () {
+          return new Promise((resolve, reject) => {
+            resolver.remove(cid, (err) => {
+              expect(err).to.not.exist()
+              const resultGet = resolver.get([cid])
+              expect(resultGet.next().value).to.eventually.be.rejected()
+                .then(() => resolve())
+                .catch((err) => reject(err))
+            })
+          })
+        }
+      })
     })
   })
 }
