@@ -65,20 +65,6 @@ module.exports = (repo) => {
           resolver._put(nc.cid, nc.node, cb)
         }, done)
       })
-
-      // TODO vmx 2018-11-30 Change this test to use `get()`.
-      // it('resolver._get', (done) => {
-      //   resolver.put(node1, { cid: cid1 }, (err) => {
-      //     expect(err).to.not.exist()
-      //     resolver.get(cid1, (err, result) => {
-      //       expect(err).to.not.exist()
-      //       expect(node1.number.toString('hex')).to.eql('01')
-      //       expect(node1.raw).to.eql(result.value.raw)
-      //       expect(node1.hash()).to.eql(result.value.hash())
-      //       done()
-      //     })
-      //   })
-      // })
     })
 
     describe('public api', () => {
@@ -157,29 +143,37 @@ module.exports = (repo) => {
         expect(node3.value.toString('hex')).to.eql('01')
       })
 
-      // TODO vmx 2018-11-30: remove this `get()` call with the new `get()`
-      // it('resolver.remove', (done) => {
-      //   resolver.put(node1, { cid: cid1 }, (err) => {
-      //     expect(err).to.not.exist()
-      //     resolver.get(cid1, (err, result) => {
-      //       expect(err).to.not.exist()
-      //       const node = result.value
-      //       expect(node1.raw).to.eql(node.raw)
-      //       expect(node1.hash()).to.eql(node.hash())
-      //       remove()
-      //     })
-      //   })
-      //
-      //   function remove () {
-      //     resolver.remove(cid1, (err) => {
-      //       expect(err).to.not.exist()
-      //       resolver.get(cid1, (err) => {
-      //         expect(err).to.exist()
-      //         done()
-      //       })
-      //     })
-      //   }
-      // })
+      it('resolver.get round-trip', async () => {
+        const resultPut = resolver.put([node1], { format: formatEthBlock })
+        const cid = await resultPut.first()
+        const resultGet = resolver.get([cid])
+        const node = await resultGet.first()
+        // TODO vmx 2018-12-12: Find out why the full nodes not deep equal
+        expect(node.raw).to.deep.equal(node1.raw)
+      })
+
+      it('resolver.remove', async () => {
+        const resultPut = resolver.put([node1], { format: formatEthBlock })
+        const cid = await resultPut.first()
+        const resultGet = resolver.get([cid])
+        const sameAsNode1 = await resultGet.first()
+        expect(sameAsNode1.raw).to.deep.equal(node1.raw)
+        return remove()
+
+        function remove () {
+          return new Promise((resolve, reject) => {
+            resolver.remove(cid, (err) => {
+              expect(err).to.not.exist()
+              const resultGet = resolver.get([cid])
+              expect(resultGet.next().value).to.eventually.be.rejected()
+                // eslint-disable-next-line max-nested-callbacks
+                .then(() => resolve())
+                // eslint-disable-next-line max-nested-callbacks
+                .catch((err) => reject(err))
+            })
+          })
+        }
+      })
     })
   })
 }
