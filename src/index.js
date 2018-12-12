@@ -470,8 +470,47 @@ class IPLDResolver {
     return p
   }
 
-  remove (cids, callback) {
-    this.bs.delete(cids, callback)
+  /**
+   * Remove IPLD Nodes by the given CIDs.
+   *
+   * Throws an error if any of the Blocks can’t be removed. This operation is
+   * *not* atomic, some Blocks might have already been removed.
+   *
+   * @param {Iterable.<CID>} cids - The CIDs of the IPLD Nodes that should be removed
+   * @return {void}
+   */
+  remove (cids) {
+    if (!typical.isIterable(cids) || typical.isString(cids) ||
+        Buffer.isBuffer(cids)) {
+      throw new Error('`cids` must be an iterable of CIDs')
+    }
+
+    const removeIterator = {
+      next: () => {
+        // End iteration if there are no more nodes to remove
+        if (cids.length === 0) {
+          return {
+            done: true
+          }
+        }
+
+        const iterValue = new Promise((resolve, reject) => {
+          const cid = cids.shift()
+          this.bs.delete(cid, (err) => {
+            if (err) {
+              return reject(err)
+            }
+            return resolve(cid)
+          })
+        })
+
+        return {
+          value: iterValue,
+          done: false
+        }
+      }
+    }
+    return fancyIterator(removeIterator)
   }
 
   /*           */
