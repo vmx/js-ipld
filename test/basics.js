@@ -10,7 +10,6 @@ chai.use(chaiAsProised)
 const BlockService = require('ipfs-block-service')
 const CID = require('cids')
 const multihash = require('multihashes')
-const pull = require('pull-stream')
 
 const IPLDResolver = require('../src')
 
@@ -72,21 +71,6 @@ module.exports = (repo) => {
         expect(err.message).to.eql('No resolver found for codec "base1"')
         done()
       })
-    })
-
-    it('treeStream - errors on unknown resolver', (done) => {
-      const bs = new BlockService(repo)
-      const r = new IPLDResolver({ blockService: bs })
-      // choosing a format that is not supported
-      const cid = new CID(1, 'base1', multihash.encode(Buffer.from('abcd', 'hex'), 'sha1'))
-      pull(
-        r.treeStream(cid, '/', {}),
-        pull.collect(function (err) {
-          expect(err).to.exist()
-          expect(err.message).to.eql('No resolver found for codec "base1"')
-          done()
-        })
-      )
     })
   })
 }

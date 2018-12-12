@@ -1,12 +1,9 @@
 'use strict'
 
 const Block = require('ipfs-block')
-const pull = require('pull-stream')
 const CID = require('cids')
 const IPFSRepo = require('ipfs-repo')
 const BlockService = require('ipfs-block-service')
-const pullDeferSource = require('pull-defer').source
-const pullTraverse = require('pull-traverse')
 const map = require('async/map')
 const series = require('async/series')
 const waterfall = require('async/waterfall')
@@ -356,124 +353,6 @@ class IPLDResolver {
       }
     }
     return fancyIterator(putIterator)
-  }
-
-  treeStream (cid, path, options) {
-    if (typeof path === 'object') {
-      options = path
-      path = undefined
-    }
-
-    options = options || {}
-
-    let p
-
-    if (!options.recursive) {
-      p = pullDeferSource()
-
-      waterfall([
-        async () => {
-          const codec = this._codecFromName(cid.codec)
-          return this._getFormat(codec)
-        },
-        (format, cb) => this.bs.get(cid, (err, block) => {
-          if (err) return cb(err)
-          cb(null, format, block)
-        }),
-        (format, block, cb) => format.resolver.tree(block.data, cb)
-      ], (err, paths) => {
-        if (err) {
-          p.abort(err)
-          return p
-        }
-        p.resolve(pull.values(paths))
-      })
-    }
-
-    // recursive
-    if (options.recursive) {
-      p = pull(
-        pullTraverse.widthFirst({
-          basePath: null,
-          cid: cid
-        }, (el) => {
-          // pass the paths through the pushable pull stream
-          // continue traversing the graph by returning
-          // the next cids with deferred
-
-          if (typeof el === 'string') {
-            return pull.empty()
-          }
-
-          const deferred = pullDeferSource()
-          const cid = el.cid
-
-          waterfall([
-            async () => {
-              const codec = this._codecFromName(cid.codec)
-              return this._getFormat(codec)
-            },
-            (format, cb) => this.bs.get(cid, (err, block) => {
-              if (err) return cb(err)
-              cb(null, format, block)
-            }),
-            (format, block, cb) => format.resolver.tree(block.data, (err, paths) => {
-              if (err) {
-                return cb(err)
-              }
-              map(paths, (p, cb) => {
-                format.resolver.isLink(block.data, p, (err, link) => {
-                  if (err) {
-                    return cb(err)
-                  }
-                  cb(null, { path: p, link: link })
-                })
-              }, cb)
-            })
-          ], (err, paths) => {
-            if (err) {
-              deferred.abort(err)
-              return deferred
-            }
-
-            deferred.resolve(pull.values(paths.map((p) => {
-              const base = el.basePath ? el.basePath + '/' + p.path : p.path
-              if (p.link) {
-                return {
-                  basePath: base,
-                  cid: IPLDResolver._maybeCID(p.link)
-                }
-              }
-              return base
-            })))
-          })
-          return deferred
-        }),
-        pull.map((e) => {
-          if (typeof e === 'string') {
-            return e
-          }
-          return e.basePath
-        }),
-        pull.filter(Boolean)
-      )
-    }
-
-    // filter out by path
-    if (path) {
-      return pull(
-        p,
-        pull.map((el) => {
-          if (el.indexOf(path) === 0) {
-            el = el.slice(path.length + 1)
-            return el
-          }
-        }),
-        pull.filter(Boolean)
-      )
-    }
-
-    return p
   }
 
   /**
