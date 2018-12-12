@@ -33,40 +33,49 @@ class IPLDResolver {
     // Object with current list of active resolvers
     this.resolvers = {}
 
-    // API entry point
-    this.support = {}
-
-    // Adds support for an IPLD format
-    this.support.add = (multicodec, resolver, util) => {
-      if (this.resolvers[multicodec]) {
-        throw new Error('Resolver already exists for codec "' + multicodec + '"')
-      }
-
-      this.resolvers[multicodec] = {
-        resolver: resolver,
-        util: util
-      }
-    }
-
     if (options.loadFormat === undefined) {
-      this.support.load = async (codec) => {
-        throw new Error(`No resolver found for codec "${codec}"`)
+      this.loadFormat = async (codec) => {
+        const codecName = this._codecName(codec)
+        throw new Error(`No resolver found for codec "${codecName}"`)
       }
     } else {
-      this.support.load = options.loadFormat
-    }
-
-    this.support.rm = (multicodec) => {
-      if (this.resolvers[multicodec]) {
-        delete this.resolvers[multicodec]
-      }
+      this.loadFormat = options.loadFormat
     }
 
     // Enable all supplied formats
     for (const format of options.formats) {
-      const { resolver, util } = format
-      const multicodec = resolver.multicodec
-      this.support.add(multicodec, resolver, util)
+      this.addFormat(format)
+    }
+  }
+
+  /**
+   * Add support for an IPLD Format.
+   *
+   * @param {Object} format - The implementation of an IPLD Format.
+   * @returns {void}
+   */
+  addFormat (format) {
+    const codec = this._codecFromName(format.resolver.multicodec)
+    if (this.resolvers[codec]) {
+      const codecName = this._codecName(format.resolver.multicodec)
+      throw new Error(`Resolver already exists for codec "${codecName}"`)
+    }
+
+    this.resolvers[codec] = {
+      resolver: format.resolver,
+      util: format.util
+    }
+  }
+
+  /**
+   * Remove support for an IPLD Format.
+   *
+   * @param {number} codec - The codec of the IPLD Format to remove.
+   * @returns {void}
+   */
+  removeFormat (codec) {
+    if (this.resolvers[codec]) {
+      delete this.resolvers[codec]
     }
   }
 
@@ -97,7 +106,8 @@ class IPLDResolver {
         return new Promise(async (resolve, reject) => {
           let format
           try {
-            format = await this._getFormat(cid.codec)
+            const codec = this._codecFromName(cid.codec)
+            format = await this._getFormat(codec)
           } catch (err) {
             return reject(err)
           }
@@ -163,7 +173,8 @@ class IPLDResolver {
       map(blocks, (block, mapCallback) => {
         // TODO vmx 2018-12-07: Make this one async/await once
         // `util.serialize()` is a Promise
-        this._getFormat(block.cid.codec).then((format) => {
+        const codec = this._codecFromName(block.cid.codec)
+        this._getFormat(codec).then((format) => {
           format.util.deserialize(block.data, mapCallback)
         }).catch((err) => {
           mapCallback(err)
@@ -181,7 +192,8 @@ class IPLDResolver {
    */
   async _deserialize (block) {
     return new Promise((resolve, reject) => {
-      this._getFormat(block.cid.codec).then((format) => {
+      const codec = this._codecFromName(block.cid.codec)
+      this._getFormat(codec).then((format) => {
         // TODO vmx 2018-12-11: Make this one async/await once
         // `util.serialize()` is a Promise
         format.util.deserialize(block.data, (err, deserialized) => {
@@ -293,16 +305,8 @@ class IPLDResolver {
           // when we hit the first iteration. This way the constructor can be
           // a synchronous function.
           if (options === undefined) {
-            // NOTE vmx 2018-12-07: This is a dirty hack to make things work with the
-            // current multicodec implementations. Everything should be based on
-            // constants and numbers and not on strings.
-            let hexString = userOptions.format.toString(16)
-            if (hexString.length % 2 === 1) {
-              hexString = '0' + hexString
-            }
-            const formatCode = multicodec.getCodec(Buffer.from(hexString, 'hex'))
             try {
-              format = await this._getFormat(formatCode)
+              format = await this._getFormat(userOptions.format)
             } catch (err) {
               return reject(err)
             }
@@ -352,7 +356,8 @@ class IPLDResolver {
 
       waterfall([
         async () => {
-          return this._getFormat(cid.codec)
+          const codec = this._codecFromName(cid.codec)
+          return this._getFormat(codec)
         },
         (format, cb) => this.bs.get(cid, (err, block) => {
           if (err) return cb(err)
@@ -388,7 +393,8 @@ class IPLDResolver {
 
           waterfall([
             async () => {
-              return this._getFormat(cid.codec)
+              const codec = this._codecFromName(cid.codec)
+              return this._getFormat(codec)
             },
             (format, cb) => this.bs.get(cid, (err, block) => {
               if (err) return cb(err)
@@ -498,9 +504,53 @@ class IPLDResolver {
     }
 
     // If not supported, attempt to dynamically load this format
-    const format = await this.support.load(codec)
+    const format = await this.loadFormat(codec)
     this.resolvers[codec] = format
     return format
+  }
+
+  /**
+   * Return the name that corresponds to a codec.
+   *
+   * NOTE: This is a dirty hack to make things work with the current
+   * multicodec implementation. In the future the multicodec implementation
+   * should use constants and have a way to return human friendly strings.
+   *
+   * @param {number} codec - The codec to get the name of.
+   * @returns {string} - The name of the given codec.
+   */
+  _codecName (codec) {
+    // const codecBuffer = multicodec.getCodeVarint(codec).readUInt8(0)
+    // let hexString = codecBuffer.toString(16)
+    let hexString = codec.toString(16)
+    if (hexString.length % 2 === 1) {
+      hexString = '0' + hexString
+    }
+    const codecName = multicodec.getCodec(Buffer.from(hexString, 'hex'))
+    return codecName
+  }
+
+  /**
+   * Return the codec based on the name.
+   *
+   * This is the reverse function of `_codecName()`.
+   *
+   * NOTE: This is a hack and it should really be replaced by a better
+   * multicodec API.
+   *
+   * @param {string} name = The name of the codec.
+   * @returns {number} codec = The coe of the given name.
+   */
+  _codecFromName (name) {
+    const codecBuffer = multicodec.getCodeVarint(name)
+    switch (codecBuffer.length) {
+      case 1:
+        return codecBuffer.readUInt8(0)
+      case 2:
+        return codecBuffer.readUInt16BE(0)
+      default:
+        // Not needed as other cases return
+    }
   }
 
   _put (cid, node, callback) {
@@ -508,7 +558,10 @@ class IPLDResolver {
 
     waterfall([
       async () => {
-        return this._getFormat(cid.codec)
+        // TODO vmx 2018-12-12: Shouldn't be needed once all the code uses
+        // the codec numbers instead of strings.
+        const codec = this._codecFromName(cid.codec)
+        return this._getFormat(codec)
       },
       (format, cb) => format.util.serialize(node, cb),
       (buf, cb) => this.bs.put(new Block(buf, cid), cb)
