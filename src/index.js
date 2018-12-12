@@ -173,6 +173,85 @@ class IPLDResolver {
     })
   }
 
+  /*
+   * Deserialize a given block
+   *
+   * @param {Object} block - The block to deserialize
+   * @return {Object} = Returns the deserialized node
+   */
+  async _deserialize (block) {
+    return new Promise((resolve, reject) => {
+      this._getFormat(block.cid.codec).then((format) => {
+        // TODO vmx 2018-12-11: Make this one async/await once
+        // `util.serialize()` is a Promise
+        format.util.deserialize(block.data, (err, deserialized) => {
+          if (err) {
+            return reject(err)
+          }
+          return resolve(deserialized)
+        })
+      }).catch((err) => {
+        return reject(err)
+      })
+    })
+  }
+
+  /**
+   * Get multiple nodes back from an array of CIDs.
+   *
+   * @param {Iterable.<CID>} cids - The CIDs of the IPLD Nodes that should be retrieved.
+   * @returns {Iterable.<Promise.<Object>>} - Returns an async iterator with the IPLD Nodes that correspond to the given `cids`.
+   */
+  get (cids) {
+    if (!typical.isIterable(cids) || typical.isString(cids) ||
+        Buffer.isBuffer(cids)) {
+      throw new Error('`cids` must be an iterable of CIDs')
+    }
+
+    let blocks
+    const getIterator = {
+      next: () => {
+        // End of iteration if there aren't any blocks left to return
+        if (cids.length === 0 ||
+          (blocks !== undefined && blocks.length === 0)
+        ) {
+          return Promise.resolve({ done: true })
+        }
+
+        return new Promise(async (resolve, reject) => {
+          // Lazy load block.
+          // Currntly the BlockService return all nodes as an array. In the
+          // future this will also be an iterator
+          if (blocks === undefined) {
+            const cidsArray = Array.from(cids)
+            this.bs.getMany(cidsArray, async (err, returnedBlocks) => {
+              if (err) {
+                return reject(err)
+              }
+              blocks = returnedBlocks
+              const block = blocks.shift()
+              try {
+                const node = await this._deserialize(block)
+                return resolve({ done: false, value: node })
+              } catch (err) {
+                return reject(err)
+              }
+            })
+          } else {
+            const block = blocks.shift()
+            try {
+              const node = await this._deserialize(block)
+              return resolve({ done: false, value: node })
+            } catch (err) {
+              return reject(err)
+            }
+          }
+        })
+      }
+    }
+    return fancyIterator(getIterator)
+  }
+
   /**
    * Stores the given IPLD Nodes of a recognized IPLD Format.
    *
