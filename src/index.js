@@ -4,7 +4,6 @@ const Block = require('ipfs-block')
 const CID = require('cids')
 const IPFSRepo = require('ipfs-repo')
 const BlockService = require('ipfs-block-service')
-const map = require('async/map')
 const series = require('async/series')
 const waterfall = require('async/waterfall')
 const MemoryStore = require('interface-datastore').MemoryDatastore
@@ -153,35 +152,6 @@ class IPLDResolver {
   }
 
   /**
-   * Get multiple nodes back from an array of CIDs.
-   *
-   * @param {Array<CID>} cids
-   * @param {function(Error, Array)} callback
-   * @returns {void}
-   */
-  getMany (cids, callback) {
-    if (!Array.isArray(cids)) {
-      return callback(new Error('Argument must be an array of CIDs'))
-    }
-    this.bs.getMany(cids, (err, blocks) => {
-      if (err) {
-        return callback(err)
-      }
-      map(blocks, (block, mapCallback) => {
-        // TODO vmx 2018-12-07: Make this one async/await once
-        // `util.serialize()` is a Promise
-        const codec = this._codecFromName(block.cid.codec)
-        this._getFormat(codec).then((format) => {
-          format.util.deserialize(block.data, mapCallback)
-        }).catch((err) => {
-          mapCallback(err)
-        })
-      },
-      callback)
-    })
-  }
-
-  /*
    * Deserialize a given block
    *
    * @param {Object} block - The block to deserialize
@@ -450,25 +420,6 @@ class IPLDResolver {
       }
       callback(null, cid)
     })
-  }
-
-  /**
-   * Return a CID instance if it is a link.
-   *
-   * If something is a link `{"/": "baseencodedcid"}` or a CID, then return
-   * a CID object, else return `null`.
-   *
-   * @param {*} link - The object to check
-   * @returns {?CID} - A CID instance
-   */
-  static _maybeCID (link) {
-    if (CID.isCID(link)) {
-      return link
-    }
-    if (link && link['/'] !== undefined) {
-      return new CID(link['/'])
-    }
-    return null
   }
 }
 
