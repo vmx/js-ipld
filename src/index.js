@@ -156,30 +156,6 @@ class IPLDResolver {
   }
 
   /**
-   * Deserialize a given block
-   *
-   * @param {Object} block - The block to deserialize
-   * @return {Object} = Returns the deserialized node
-   */
-  async _deserialize (block) {
-    return new Promise((resolve, reject) => {
-      const codec = this._codecFromName(block.cid.codec)
-      this._getFormat(codec).then((format) => {
-        // TODO vmx 2018-12-11: Make this one async/await once
-        // `util.serialize()` is a Promise
-        format.util.deserialize(block.data, (err, deserialized) => {
-          if (err) {
-            return reject(err)
-          }
-          return resolve(deserialized)
-        })
-      }).catch((err) => {
-        return reject(err)
-      })
-    })
-  }
-
-  /**
    * Get multiple nodes back from an array of CIDs.
    *
    * @param {Iterable.<CID>} cids - The CIDs of the IPLD Nodes that should be retrieved.
@@ -380,6 +356,30 @@ class IPLDResolver {
     const format = await this.loadFormat(codec)
     this.resolvers[codec] = format
     return format
+  }
+
+  /**
+   * Deserialize a given block
+   *
+   * @param {Object} block - The block to deserialize
+   * @return {Object} = Returns the deserialized node
+   */
+  async _deserialize (block) {
+    return new Promise((resolve, reject) => {
+      const codec = this._codecFromName(block.cid.codec)
+      this._getFormat(codec).then((format) => {
+        // TODO vmx 2018-12-11: Make this one async/await once
+        // `util.serialize()` is a Promise
+        format.util.deserialize(block.data, (err, deserialized) => {
+          if (err) {
+            return reject(err)
+          }
+          return resolve(deserialized)
+        })
+      }).catch((err) => {
+        return reject(err)
+      })
+    })
   }
 
   /**
