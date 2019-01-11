@@ -10,6 +10,7 @@ chai.use(chaiAsProised)
 const BlockService = require('ipfs-block-service')
 const CID = require('cids')
 const multihash = require('multihashes')
+const multicodec = require('multicodec')
 
 const IPLDResolver = require('../src')
 
@@ -37,22 +38,23 @@ module.exports = (repo) => {
       const bs = new BlockService(repo)
       const r = new IPLDResolver({ blockService: bs })
       // choosing a format that is not supported
-      const cid = new CID(1, 'base1', multihash.encode(Buffer.from('abcd', 'hex'), 'sha1'))
+      const cid = new CID(
+        1,
+        multicodec.BLAKE2B_8,
+        multihash.encode(Buffer.from('abcd', 'hex'), 'sha1')
+      )
       const result = r.resolve(cid, '')
       await expect(result.next()).to.be.rejectedWith(
-        'No resolver found for codec "base1"')
+        'No resolver found for codec "blake2b-8"')
     })
 
     it('put - errors on unknown resolver', async () => {
       const bs = new BlockService(repo)
       const r = new IPLDResolver({ blockService: bs })
       // choosing a format that is not supported
-      // TODO vmx 2018-12-07: This shouldn't be a magic number but a constant
-      // from a multicodec module
-      const formatBase1 = 0x01
-      const result = r.put([null], { format: formatBase1 })
+      const result = r.put([null], { format: multicodec.BLAKE2B_8 })
       await expect(result.next()).to.be.rejectedWith(
-        'No resolver found for codec "base1"')
+        'No resolver found for codec "blake2b-8"')
     })
 
     it('put - errors if no options', () => {
@@ -65,10 +67,14 @@ module.exports = (repo) => {
       const bs = new BlockService(repo)
       const r = new IPLDResolver({ blockService: bs })
       // choosing a format that is not supported
-      const cid = new CID(1, 'base1', multihash.encode(Buffer.from('abcd', 'hex'), 'sha1'))
+      const cid = new CID(
+        1,
+        multicodec.BLAKE2B_8,
+        multihash.encode(Buffer.from('abcd', 'hex'), 'sha1')
+      )
       r._put(cid, null, (err, result) => {
         expect(err).to.exist()
-        expect(err.message).to.eql('No resolver found for codec "base1"')
+        expect(err.message).to.eql('No resolver found for codec "blake2b-8"')
         done()
       })
     })
