@@ -52,15 +52,15 @@ module.exports = (repo) => {
 
       function generateCids (fileData, cb) {
         ethObjs = {
-          child: generateForType('child', 'eth-block', fileData.child),
-          block: generateForType('block', 'eth-block', fileData.block),
-          stateRoot: generateForType('stateRoot', 'eth-state-trie', fileData.stateRoot),
-          state0: generateForType('state0', 'eth-state-trie', fileData.state0),
-          state00: generateForType('state00', 'eth-state-trie', fileData.state00),
-          state000: generateForType('state000', 'eth-state-trie', fileData.state000),
-          state0000: generateForType('state0000', 'eth-state-trie', fileData.state0000),
-          state00001: generateForType('state00001', 'eth-state-trie', fileData.state00001),
-          state000017: generateForType('state000017', 'eth-state-trie', fileData.state000017)
+          child: generateForType('child', multicodec.ETH_BLOCK, fileData.child),
+          block: generateForType('block', multicodec.ETH_BLOCK, fileData.block),
+          stateRoot: generateForType('stateRoot', multicodec.ETH_STATE_TRIE, fileData.stateRoot),
+          state0: generateForType('state0', multicodec.ETH_STATE_TRIE, fileData.state0),
+          state00: generateForType('state00', multicodec.ETH_STATE_TRIE, fileData.state00),
+          state000: generateForType('state000', multicodec.ETH_STATE_TRIE, fileData.state000),
+          state0000: generateForType('state0000', multicodec.ETH_STATE_TRIE, fileData.state0000),
+          state00001: generateForType('state00001', multicodec.ETH_STATE_TRIE, fileData.state00001),
+          state000017: generateForType('state000017', multicodec.ETH_STATE_TRIE, fileData.state000017)
         }
 
         cb()
@@ -70,14 +70,12 @@ module.exports = (repo) => {
         let node
 
         switch (type) {
-          case 'eth-block': node = new EthBlockHeader(rawData); break
-          case 'eth-state-trie': node = new EthTrieNode(rlp.decode(rawData)); break
+          case multicodec.ETH_BLOCK: node = new EthBlockHeader(rawData); break
+          case multicodec.ETH_STATE_TRIE: node = new EthTrieNode(rlp.decode(rawData)); break
           default: throw new Error('Unknown type!')
         }
 
-        // TODO vmx 2018-12-07: Make multicodec use constants
-        const format = multicodec.getCodeVarint(type).readUInt16BE(0)
-        const result = resolver.put([node], { format: format })
+        const result = resolver.put([node], { format: type })
         const cid = await result.first()
 
         return {

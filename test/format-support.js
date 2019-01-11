@@ -16,8 +16,6 @@ const IPLDResolver = require('../src')
 module.exports = (repo) => {
   describe('IPLD format support', () => {
     let data, cid
-    // TODO vmx 2018-12-07: Make multicodec use constants
-    const formatDagCbor = multicodec.getCodeVarint('dag-cbor').readUInt8(0)
 
     before(async () => {
       const bs = new BlockService(repo)
@@ -25,7 +23,7 @@ module.exports = (repo) => {
 
       data = { now: Date.now() }
 
-      const result = resolver.put([data], { format: formatDagCbor })
+      const result = resolver.put([data], { format: multicodec.DAG_CBOR })
       cid = await result.last()
     })
 
@@ -49,7 +47,9 @@ module.exports = (repo) => {
           blockService: bs,
           formats: [],
           async loadFormat (codec) {
-            if (codec !== formatDagCbor) throw new Error('unexpected codec')
+            if (codec !== multicodec.DAG_CBOR) {
+              throw new Error('unexpected codec')
+            }
             throw new Error(errMsg)
           }
         })
@@ -64,7 +64,9 @@ module.exports = (repo) => {
           blockService: bs,
           formats: [],
           async loadFormat (codec) {
-            if (codec !== formatDagCbor) throw new Error('unexpected codec')
+            if (codec !== multicodec.DAG_CBOR) {
+              throw new Error('unexpected codec')
+            }
             return dagCBOR
           }
         })

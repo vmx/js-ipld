@@ -29,11 +29,6 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
   let cidCbor
   let cidPb
 
-  // TODO vmx 2018-12-07: Make multicodec use constants
-  const formatDagPb = multicodec.getCodeVarint('dag-pb').readUInt8(0)
-  const formatDagCbor = multicodec.getCodeVarint('dag-cbor').readUInt8(0)
-  const hashAlgSha2 = multicodec.getCodeVarint('sha2-256').readUInt8(0)
-
   before((done) => {
     waterfall([
       (cb) => IPLDResolver.inMemory(cb),
@@ -56,10 +51,12 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
       },
       async (cid, cb) => {
         const resultPb = resolver.put([nodePb], {
-          format: formatDagPb, version: 0
+          format: multicodec.DAG_PB, version: 0
         })
         cidPb = await resultPb.first()
-        const resultCbor = resolver.put([nodeCbor], { format: formatDagCbor })
+        const resultCbor = resolver.put([nodeCbor], {
+          format: multicodec.DAG_CBOR
+        })
         cidCbor = await resultCbor.first()
       }
     ], done)
@@ -84,8 +81,8 @@ describe('IPLD Resolver for dag-cbor + dag-pb', () => {
         const result = resolver.put([node], {
           onlyHash: true,
           version: 1,
-          hashAlg: hashAlgSha2,
-          format: formatDagPb
+          hashAlg: multicodec.SHA2_256,
+          format: multicodec.DAG_PB
         })
         return result.first()
       },

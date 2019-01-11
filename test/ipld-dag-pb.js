@@ -25,9 +25,6 @@ module.exports = (repo) => {
     let cid2
     let cid3
 
-    // TODO vmx 2018-12-07: Make multicodec use constants
-    const formatDagPb = multicodec.getCodeVarint('dag-pb').readUInt8(0)
-
     before((done) => {
       const bs = new BlockService(repo)
 
@@ -104,7 +101,7 @@ module.exports = (repo) => {
 
       async function store () {
         const nodes = [node1, node2, node3]
-        const result = resolver.put(nodes, { format: formatDagPb })
+        const result = resolver.put(nodes, { format: multicodec.DAG_PB })
         cid1 = await result.first()
         cid2 = await result.first()
         cid3 = await result.first()
@@ -127,26 +124,23 @@ module.exports = (repo) => {
 
     describe('public api', () => {
       it('resolver.put with format', async () => {
-        const result = resolver.put([node1], { format: formatDagPb })
+        const result = resolver.put([node1], { format: multicodec.DAG_PB })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('dag-pb')
+        expect(cid.codec).to.equal(multicodec.DAG_PB)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('sha2-256')
       })
 
       it('resolver.put with format + hashAlg', async () => {
-        // TODO vmx 2018-12-07: Make multicodec use constants
-        const hashAlgSha3512 = multicodec.getCodeVarint('sha3-512')
-          .readUInt8(0)
-
         const result = resolver.put([node1], {
-          format: formatDagPb, hashAlg: hashAlgSha3512
+          format: multicodec.DAG_PB,
+          hashAlg: multicodec.SHA3_512
         })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('dag-pb')
+        expect(cid.codec).to.equal(multicodec.DAG_PB)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('sha3-512')
@@ -201,7 +195,7 @@ module.exports = (repo) => {
       })
 
       it('resolver.get round-trip', async () => {
-        const resultPut = resolver.put([node1], { format: formatDagPb })
+        const resultPut = resolver.put([node1], { format: multicodec.DAG_PB })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const node = await resultGet.first()
@@ -235,7 +229,7 @@ module.exports = (repo) => {
           })
         })
         const node = await createNode
-        const resultPut = resolver.put([node], { format: formatDagPb })
+        const resultPut = resolver.put([node], { format: multicodec.DAG_PB })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const sameAsNode = await resultGet.first()

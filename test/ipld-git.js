@@ -30,9 +30,6 @@ module.exports = (repo) => {
     let commit2Cid
     let tagCid
 
-    // TODO vmx 2018-12-07: Make multicodec use constants
-    const formatGitRaw = multicodec.getCodeVarint('git-raw').readUInt8(0)
-
     before((done) => {
       const bs = new BlockService(repo)
 
@@ -139,7 +136,7 @@ module.exports = (repo) => {
 
       async function store () {
         const nodes = [blobNode, treeNode, commitNode, commit2Node, tagNode]
-        const result = resolver.put(nodes, { format: formatGitRaw })
+        const result = resolver.put(nodes, { format: multicodec.GIT_RAW })
         blobCid = await result.first()
         treeCid = await result.first()
         commitCid = await result.first()
@@ -166,26 +163,23 @@ module.exports = (repo) => {
 
     describe('public api', () => {
       it('resolver.put with format', async () => {
-        const result = resolver.put([blobNode], { format: formatGitRaw })
+        const result = resolver.put([blobNode], { format: multicodec.GIT_RAW })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('git-raw')
+        expect(cid.codec).to.equal(multicodec.GIT_RAW)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('sha1')
       })
 
       it('resolver.put with format + hashAlg', async () => {
-        // TODO vmx 2018-12-07: Make multicodec use constants
-        const hashAlgSha3512 = multicodec.getCodeVarint('sha3-512')
-          .readUInt8(0)
-
         const result = resolver.put([blobNode], {
-          format: formatGitRaw, hashAlg: hashAlgSha3512
+          format: multicodec.GIT_RAW,
+          hashAlg: multicodec.SHA3_512
         })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('git-raw')
+        expect(cid.codec).to.equal(multicodec.GIT_RAW)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('sha3-512')
@@ -267,7 +261,9 @@ module.exports = (repo) => {
       })
 
       it('resolver.get round-trip', async () => {
-        const resultPut = resolver.put([blobNode], { format: formatGitRaw })
+        const resultPut = resolver.put([blobNode], {
+          format: multicodec.GIT_RAW
+        })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const node = await resultGet.first()
@@ -275,7 +271,9 @@ module.exports = (repo) => {
       })
 
       it('resolver.remove', async () => {
-        const resultPut = resolver.put([blobNode], { format: formatGitRaw })
+        const resultPut = resolver.put([blobNode], {
+          format: multicodec.GIT_RAW
+        })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const sameAsBlobNode = await resultGet.first()

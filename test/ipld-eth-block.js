@@ -27,10 +27,6 @@ module.exports = (repo) => {
     let cid2
     let cid3
 
-    // TODO vmx 2018-12-07: Make multicodec use constants
-    const formatEthBlock = multicodec.getCodeVarint('eth-block')
-      .readUInt16BE(0)
-
     before(async () => {
       const bs = new BlockService(repo)
       resolver = new IPLDResolver({
@@ -51,7 +47,7 @@ module.exports = (repo) => {
       })
 
       const nodes = [node1, node2, node3]
-      const result = resolver.put(nodes, { format: formatEthBlock })
+      const result = resolver.put(nodes, { format: multicodec.ETH_BLOCK })
       cid1 = await result.first()
       cid2 = await result.first()
       cid3 = await result.first()
@@ -71,27 +67,23 @@ module.exports = (repo) => {
 
     describe('public api', () => {
       it('resolver.put with format', async () => {
-        const result = resolver.put([node1], { format: formatEthBlock })
+        const result = resolver.put([node1], { format: multicodec.ETH_BLOCK })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('eth-block')
+        expect(cid.codec).to.equal(multicodec.ETH_BLOCK)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('keccak-256')
       })
 
       it('resolver.put with format + hashAlg', async () => {
-        // TODO vmx 2018-12-07: Make multicodec use constants
-        const hashAlgKeccak512 = multicodec.getCodeVarint('keccak-512')
-          .readUInt8(0)
-
         const result = resolver.put([node1], {
-          format: formatEthBlock,
-          hashAlg: hashAlgKeccak512
+          format: multicodec.ETH_BLOCK,
+          hashAlg: multicodec.KECCAK_512
         })
         const cid = await result.first()
         expect(cid.version).to.equal(1)
-        expect(cid.codec).to.equal('eth-block')
+        expect(cid.codec).to.equal(multicodec.ETH_BLOCK)
         expect(cid.multihash).to.exist()
         const mh = multihash.decode(cid.multihash)
         expect(mh.name).to.equal('keccak-512')
@@ -146,7 +138,9 @@ module.exports = (repo) => {
       })
 
       it('resolver.get round-trip', async () => {
-        const resultPut = resolver.put([node1], { format: formatEthBlock })
+        const resultPut = resolver.put([node1], {
+          format: multicodec.ETH_BLOCK
+        })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const node = await resultGet.first()
@@ -155,7 +149,9 @@ module.exports = (repo) => {
       })
 
       it('resolver.remove', async () => {
-        const resultPut = resolver.put([node1], { format: formatEthBlock })
+        const resultPut = resolver.put([node1], {
+          format: multicodec.ETH_BLOCK
+        })
         const cid = await resultPut.first()
         const resultGet = resolver.get([cid])
         const sameAsNode1 = await resultGet.first()
