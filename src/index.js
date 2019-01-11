@@ -51,7 +51,9 @@ class IPLDResolver {
    * @returns {void}
    */
   addFormat (format) {
-    const codec = this._codecFromName(format.resolver.multicodec)
+    // IPLD Formats are using strings instead of constants for the multicodec
+    const codecBuffer = multicodec.getCodeVarint(format.resolver.multicodec)
+    const codec = multicodec.getCode(codecBuffer)
     if (this.resolvers[codec]) {
       const codecName = this._codecName(format.resolver.multicodec)
       throw new Error(`Resolver already exists for codec "${codecName}"`)
@@ -102,8 +104,7 @@ class IPLDResolver {
         return new Promise(async (resolve, reject) => {
           let format
           try {
-            const codec = this._codecFromName(cid.codec)
-            format = await this._getFormat(codec)
+            format = await this._getFormat(cid.codec)
           } catch (err) {
             return reject(err)
           }
@@ -342,7 +343,7 @@ class IPLDResolver {
    */
   async _deserialize (block) {
     return new Promise((resolve, reject) => {
-      const codec = this._codecFromName(block.cid.codec)
+      const codec = block.cid.codec
       this._getFormat(codec).then((format) => {
         // TODO vmx 2018-12-11: Make this one async/await once
         // `util.serialize()` is a Promise
@@ -379,38 +380,12 @@ class IPLDResolver {
     return codecName
   }
 
-  /**
-   * Return the codec based on the name.
-   *
-   * This is the reverse function of `_codecName()`.
-   *
-   * NOTE: This is a hack and it should really be replaced by a better
-   * multicodec API.
-   *
-   * @param {string} name = The name of the codec.
-   * @returns {number} codec = The coe of the given name.
-   */
-  _codecFromName (name) {
-    const codecBuffer = multicodec.getCodeVarint(name)
-    switch (codecBuffer.length) {
-      case 1:
-        return codecBuffer.readUInt8(0)
-      case 2:
-        return codecBuffer.readUInt16BE(0)
-      default:
-        // Not needed as other cases return
-    }
-  }
-
   _put (cid, node, callback) {
     callback = callback || noop
 
     waterfall([
       async () => {
-        // TODO vmx 2018-12-12: Shouldn't be needed once all the code uses
-        // the codec numbers instead of strings.
-        const codec = this._codecFromName(cid.codec)
-        return this._getFormat(codec)
+        return this._getFormat(cid.codec)
       },
       (format, cb) => format.util.serialize(node, cb),
       (buf, cb) => this.bs.put(new Block(buf, cid), cb)
