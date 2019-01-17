@@ -20,7 +20,16 @@ exports.ends = (iterator) => {
   return iterator
 }
 
+exports.all = async (iterator) => {
+  const values = []
+  for await (const value of iterator) {
+    values.push(value)
+  }
+  return values
+}
+
 exports.fancyIterator = (iterator) => {
   iterator[Symbol.asyncIterator] = function () { return this }
+  iterator.all = () => exports.all(iterator)
   return exports.ends(iterator)
 }
